@@ -10,6 +10,9 @@ TRANSPROB = {}
 EMISSIONPROB = {}
 LISTOFTAGS = []
 
+#PENALTY FOR UNKNOWN WORDS
+UNKOWN_PENALTY = 0.9 #unknow words suffer a 10% penality to probaility level
+
 ''' Calculate list of tags '''
 def calcTagList(dataset):
     tagDict = {} #dictonary record number of upostag seen
@@ -67,7 +70,7 @@ def calcEmissionProb(dataset):
     for each in dataset:
         for i in range(len(each)):
             tag = each[i]['upostag']
-            word = each[i]['form']
+            word = each[i]['form'].lower()
             ''' Logic handling nested dict '''
             #if tag not in dict then no word has been counted for that tag
             if tag not in emissionDict: 
@@ -119,6 +122,7 @@ def simpleStemming(word):
         morphList.append(word[i:])
     morphList = list(dict.fromkeys(morphList)) #removes duplicates from list
     morphList.sort(key=len, reverse=True) #sort by word length
+    morphList = morphList[1:-1] #remove front and back
     return morphList
 
 ''' Implementation of Hidden Markov model '''
@@ -144,7 +148,7 @@ def viterbiAlgo(sentence, tags):
             morphList = simpleStemming(sentence[0])
             for wordMorph in morphList:
                 try:
-                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph]))
+                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY))
                     break
                 except:
                     continue
@@ -166,10 +170,11 @@ def viterbiAlgo(sentence, tags):
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
                 except Exception as e:
-                    morphList = simpleStemming(sentence[0])
+                    morphList = simpleStemming(sentence[i])
+                    logProb = 0
                     for wordMorph in morphList:
                         try:
-                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph]))
+                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY))
                             break
                         except:
                             continue
@@ -239,7 +244,7 @@ if __name__ == "__main__":
             wordList = []
             tagList = []
             for word in tokenlist:
-                wordList.append(word['form'])
+                wordList.append(word['form'].lower())
                 tagList.append(word['upostag'])
             viterbiAlgo(wordList, tagList)
             break
