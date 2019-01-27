@@ -123,6 +123,7 @@ def simpleStemming(word):
     morphList = list(dict.fromkeys(morphList)) #removes duplicates from list
     morphList.sort(key=len, reverse=True) #sort by word length
     morphList = morphList[1:-1] #remove front and back
+    morphList = [i for i in morphList if len(i) >= 2]
     return morphList
 
 ''' Implementation of Hidden Markov model '''
