@@ -107,12 +107,23 @@ def safeMultiply(x, y):
     else:
         return x + y
 
+def simpleStemming(word):
+    ''' Very naive stemming technique, remove 1 char at a time from back ,do samething from front
+        return a list of each char removed and brute force to see if variation exits.
+        sort list so that longest words appear in the front, so we dont automaticlly assume the word is
+        a DET like A.
+    '''
+    morphList = []
+    for i in range(len(word)):
+        morphList.append(word[:i*-1])
+        morphList.append(word[i:])
+    morphList = list(dict.fromkeys(morphList)) #removes duplicates from list
+    morphList.sort(key=len, reverse=True) #sort by word length
+    return morphList
+
 ''' Implementation of Hidden Markov model '''
-def viterbiAlgo(sentence):
-    # Uncomment this line to look at the sentence, it is "['What', 'if', 'Google', 'Morphed', 'Into', 'GoogleOS', '?']"
-    print(sentence)
-    # Uncomment this line to look at the emission probabilities - note that Morphed and GoogleOS is not in the dictionary at all
-    # print(EMISSIONPROB)
+def viterbiAlgo(sentence, tags):
+    print(sentence)#DEBUG
     ''' init tables and array used in dynamic programming '''
     sentenceLen = len(sentence) - 1
     states = np.arange(len(LISTOFTAGS))
@@ -121,26 +132,30 @@ def viterbiAlgo(sentence):
     pred = np.zeros( (sentenceLen, ) )
     ''' Starting probability '''
     '''
-        Since our table is an indexable list, and our probability is a un-indexable dict 
+        Since our table is an indexable list, and our probability is a un-indexable dict
         we need a external counter variable(eachCounter)
     '''
     eachCounter = 0
-    print(sentence[0])
+    print("[ " +sentence[0] + " ] " + tags[0])#DEBUG
     for each in LISTOFTAGS:
         try:
             table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][sentence[0]]))
         except:
-            table[eachCounter,0] = 0
-        # Uncomment this to look at the initial probabilities (in log scale)
+            morphList = simpleStemming(sentence[0])
+            for wordMorph in morphList:
+                try:
+                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph]))
+                    break
+                except:
+                    continue
         print(each + "\t" + str(table[eachCounter, 0]))
         bktrac[eachCounter,0] = each
         eachCounter += 1
-    # Uncomment this to group the probability in time groups
-    print("----")
+    print("----") #DEBUG
 
     ''' Dynamic programming '''
     for i in range(1, sentenceLen): #for each word fill in probability
-        print(sentence[i])
+        print("[ " +sentence[i] + " ] " + tags[i])#DEBUG
         state1Row = 0
         for state1 in LISTOFTAGS:
             bestProb = 0
@@ -150,8 +165,14 @@ def viterbiAlgo(sentence):
                 tranState = state2 + "_" + state1
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
-                except Exception as e: 
-                    logProb = 0
+                except Exception as e:
+                    morphList = simpleStemming(sentence[0])
+                    for wordMorph in morphList:
+                        try:
+                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph]))
+                            break
+                        except:
+                            continue
                 if not logProb == 0:
                     if (bestProb == 0) or (logProb > bestProb):
                         bestProb = logProb
@@ -160,10 +181,10 @@ def viterbiAlgo(sentence):
             table[state1Row, i] = bestProb
             bktrac[state1Row, i] = bestPrev
             # Uncomment this to look at the probabilities at time i (in log scale)
-            print(state1 + "\t" + str(table[state1Row, i]))
+            print(state1 + "\t" + str(table[state1Row, i]))#DEBUG
             state1Row += 1
         # Uncomment this to group the probability in time groups
-        print("----")
+        print("----")#DEBUG
 
 if __name__ == "__main__":
     ''' handle command line arguments '''
@@ -187,10 +208,6 @@ if __name__ == "__main__":
         calcTransProb(dataset)
         calcEmissionProb(dataset)
         #print dictionary for debugging
-        print(LISTOFTAGS)
-        print(STARTPROB)
-        print(TRANSPROB)
-        print(EMISSIONPROB)
 
         #store DICT in pickle file
         with open('listoftag.pickle', 'wb') as tagOut:
@@ -224,5 +241,5 @@ if __name__ == "__main__":
             for word in tokenlist:
                 wordList.append(word['form'])
                 tagList.append(word['upostag'])
-            viterbiAlgo(wordList)
+            viterbiAlgo(wordList, tagList)
             break
