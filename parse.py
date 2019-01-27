@@ -21,7 +21,9 @@ def calcTagProb(dataset):
     for each in dataset:
         for i in range(len(each) - 1):
             tag = each[i]['upostag'] #get upostag for word
-            if tag not in tagDict:
+            if tag in tagDict:
+                tagDict[tag] = tagDict.get(tag) + 1
+            else:
                 tagDict[tag] = 1
             tagTotal += 1
     '''Convert dict in to list of tags'''
@@ -216,7 +218,6 @@ if __name__ == "__main__":
         calcStartProb(dataset)
         calcTransProb(dataset)
         calcEmissionProb(dataset)
-        #print dictionary for debugging
 
         #store DICT in pickle file
         with open('tagprob.pickle', 'wb') as tagOut:
@@ -243,6 +244,8 @@ if __name__ == "__main__":
         #transisition probability
         transIn = open('transprob.pickle','rb')
         TRANSPROB = pickle.load(transIn)
+
+        print(TAGPROB)
 
         for tokenlist in conllu.parse_incr(data_file):
             wordList = []
