@@ -5,26 +5,29 @@ import pickle
 import numpy as np
 
 #GLOBAL DICTS
-STARTPROB = {}
-TRANSPROB = {}
-EMISSIONPROB = {}
-LISTOFTAGS = []
+STARTPROB = {} #probability of starting with this pos
+TRANSPROB = {} #probability of transitioning from pos X -> Y
+EMISSIONPROB = {} #probability of word coming emitting from particular pos
+TAGPROB = {} #probabililty of seeing this tag
 
 #PENALTY FOR UNKNOWN WORDS
 UNKOWN_PENALTY = 0.9 #unknow words suffer a 10% penality to probaility level
 
 ''' Calculate list of tags '''
-def calcTagList(dataset):
+def calcTagProb(dataset):
     tagDict = {} #dictonary record number of upostag seen
+    tagTotal = 0
     '''if upostag exists increment else create new and set to 1'''
     for each in dataset:
         for i in range(len(each) - 1):
             tag = each[i]['upostag'] #get upostag for word
             if tag not in tagDict:
                 tagDict[tag] = 1
+            tagTotal += 1
     '''Convert dict in to list of tags'''
     for each in tagDict:
-        LISTOFTAGS.append(each)
+        prob = (tagDict[each]/tagTotal)
+        TAGPROB[each] = prob
 
 ''' Calculate starting probabilities '''
 def calcStartProb(dataset):
@@ -131,9 +134,9 @@ def viterbiAlgo(sentence, tags):
     print(sentence)#DEBUG
     ''' init tables and array used in dynamic programming '''
     sentenceLen = len(sentence) - 1
-    states = np.arange(len(LISTOFTAGS))
-    table = np.zeros( (len(LISTOFTAGS), sentenceLen) )
-    bktrac = np.zeros( (len(LISTOFTAGS), sentenceLen) , dtype = 'S5' )
+    states = np.arange(len(TAGPROB))
+    table = np.zeros( (len(TAGPROB), sentenceLen) )
+    bktrac = np.zeros( (len(TAGPROB), sentenceLen) , dtype = 'S5' )
     pred = np.zeros( (sentenceLen, ) )
     ''' Starting probability '''
     '''
@@ -142,7 +145,7 @@ def viterbiAlgo(sentence, tags):
     '''
     eachCounter = 0
     print("[ " +sentence[0] + " ] " + tags[0])#DEBUG
-    for each in LISTOFTAGS:
+    for each in TAGPROB:
         try:
             table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][sentence[0]]))
         except:
@@ -162,11 +165,11 @@ def viterbiAlgo(sentence, tags):
     for i in range(1, sentenceLen): #for each word fill in probability
         print("[ " +sentence[i] + " ] " + tags[i])#DEBUG
         state1Row = 0
-        for state1 in LISTOFTAGS:
+        for state1 in TAGPROB:
             bestProb = 0
             bestPrev = "NULL"
             state2Row = 0
-            for state2 in LISTOFTAGS:
+            for state2 in TAGPROB:
                 tranState = state2 + "_" + state1
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
@@ -209,15 +212,15 @@ if __name__ == "__main__":
         for tokenlist in conllu.parse_incr(data_file):
             dataset.append(tokenlist)
         ''' Calculate relevent probailities '''
-        calcTagList(dataset)
+        calcTagProb(dataset)
         calcStartProb(dataset)
         calcTransProb(dataset)
         calcEmissionProb(dataset)
         #print dictionary for debugging
 
         #store DICT in pickle file
-        with open('listoftag.pickle', 'wb') as tagOut:
-            pickle.dump(LISTOFTAGS, tagOut)
+        with open('tagprob.pickle', 'wb') as tagOut:
+            pickle.dump(TAGPROB, tagOut)
         with open('startprob.pickle', 'wb') as startOut:
             pickle.dump(STARTPROB, startOut)
         with open('transprob.pickle', 'wb') as transOut:
@@ -229,8 +232,8 @@ if __name__ == "__main__":
     if function == "--test":
         ''' load in pickled probability dictonary '''
         #list of possible tags
-        tagIn = open('listoftag.pickle','rb')
-        LISTOFTAGS = pickle.load(tagIn)
+        tagIn = open('tagprob.pickle','rb')
+        TAGPROB = pickle.load(tagIn)
         #emission probability
         emissionIn = open('emissionprob.pickle','rb')
         EMISSIONPROB = pickle.load(emissionIn)
