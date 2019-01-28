@@ -133,20 +133,19 @@ def simpleStemming(word):
 
 ''' Implementation of Hidden Markov model '''
 def viterbiAlgo(sentence, tags):
-    print(sentence)#DEBUG
+    #print(sentence)#DEBUG
     ''' init tables and array used in dynamic programming '''
-    sentenceLen = len(sentence) - 1
+    sentenceLen = len(sentence)
     states = np.arange(len(TAGPROB))
     table = np.zeros( (len(TAGPROB), sentenceLen) )
-    bktrac = np.zeros( (len(TAGPROB), sentenceLen) , dtype = 'S5' )
-    pred = np.zeros( (sentenceLen, ) )
+    pred = []
     ''' Starting probability '''
     '''
         Since our table is an indexable list, and our probability is a un-indexable dict
         we need a external counter variable(eachCounter)
     '''
     eachCounter = 0
-    print("[ " +sentence[0] + " ] " + tags[0])#DEBUG
+    #print("[ " +sentence[0] + " ] " + tags[0])#DEBUG
     for each in TAGPROB:
         try:
             table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][sentence[0]]))
@@ -154,48 +153,51 @@ def viterbiAlgo(sentence, tags):
             morphList = simpleStemming(sentence[0])
             for wordMorph in morphList:
                 try:
-                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY))
+                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY * TAGPROB[each]))
                     break
                 except:
                     continue
-        print(each + "\t" + str(table[eachCounter, 0]))
-        bktrac[eachCounter,0] = each
+        #print(each + "\t" + str(table[eachCounter, 0]))#DEBUG
         eachCounter += 1
-    print("----") #DEBUG
+    #print("----") #DEBUG
 
     ''' Dynamic programming '''
     for i in range(1, sentenceLen): #for each word fill in probability
-        print("[ " +sentence[i] + " ] " + tags[i])#DEBUG
+        #print("[ " +sentence[i] + " ] " + tags[i])#DEBUG
         state1Row = 0
         for state1 in TAGPROB:
             bestProb = 0
-            bestPrev = "NULL"
             state2Row = 0
             for state2 in TAGPROB:
                 tranState = state2 + "_" + state1
+                logProb = 0
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
                 except Exception as e:
                     morphList = simpleStemming(sentence[i])
-                    logProb = 0
                     for wordMorph in morphList:
                         try:
-                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY))
+                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY * TAGPROB[state1]))
                             break
                         except:
                             continue
                 if not logProb == 0:
                     if (bestProb == 0) or (logProb > bestProb):
                         bestProb = logProb
-                        bestPrev = state2
                 state2Row += 1
             table[state1Row, i] = bestProb
-            bktrac[state1Row, i] = bestPrev
-            # Uncomment this to look at the probabilities at time i (in log scale)
-            print(state1 + "\t" + str(table[state1Row, i]))#DEBUG
+            #print(state1 + "\t" + str(table[state1Row, i]))#DEBUG
             state1Row += 1
-        # Uncomment this to group the probability in time groups
-        print("----")#DEBUG
+        #print("----")#DEBUG
+
+    for i in range(sentenceLen):
+        possibleTags = table[:,i]
+        maxProb = np.max(possibleTags[np.nonzero(possibleTags)])
+        idx = possibleTags.tolist().index(maxProb)
+        tagList = list(TAGPROB.keys())
+        pred.append(tagList[idx])
+
+    return pred
 
 if __name__ == "__main__":
     ''' handle command line arguments '''
@@ -245,13 +247,15 @@ if __name__ == "__main__":
         transIn = open('transprob.pickle','rb')
         TRANSPROB = pickle.load(transIn)
 
-        print(TAGPROB)
-
+        counter = 0
         for tokenlist in conllu.parse_incr(data_file):
+            if counter == 2:
+                break
             wordList = []
             tagList = []
             for word in tokenlist:
                 wordList.append(word['form'].lower())
                 tagList.append(word['upostag'])
-            viterbiAlgo(wordList, tagList)
-            break
+            pred = viterbiAlgo(wordList, tagList)
+
+            counter += 1
