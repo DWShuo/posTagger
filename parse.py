@@ -11,7 +11,7 @@ EMISSIONPROB = {} #probability of word coming emitting from particular pos
 TAGPROB = {} #probabililty of seeing this tag
 
 #PENALTY FOR UNKNOWN WORDS
-UNKOWN_PENALTY = 0.9 #unknow words suffer a 10% penality to probaility level
+UNKOWN_PENALTY = 0.7 #unknow words suffer a 30% penality to probaility level
 
 ''' Calculate list of tags '''
 def calcTagProb(dataset):
@@ -76,16 +76,21 @@ def calcEmissionProb(dataset):
         for i in range(len(each)):
             tag = each[i]['upostag']
             word = each[i]['form'].lower()
+            normal = each[i]['lemma'].lower()
             ''' Logic handling nested dict '''
             #if tag not in dict then no word has been counted for that tag
             if tag not in emissionDict: 
                 emissionDict[tag] = {}
-                if word not in emissionDict[tag]:
-                    emissionDict[tag][word] = 1
+                emissionDict[tag][word] = 1
+                emissionDict[tag][normal] = 1
             #if tag is in dict check if word is counted; if not create new, else increment count
-            if tag in emissionDict: 
+            if tag in emissionDict:
                 if word not in emissionDict[tag]:
                     emissionDict[tag][word] = 1
+                else:
+                    emissionDict[tag][word] = emissionDict[tag][word] + 1
+                if normal not in emissionDict[tag]:
+                    emissionDict[tag][normal] = 1
                 else:
                     emissionDict[tag][word] = emissionDict[tag][word] + 1
     ''' calculate emission probability '''
@@ -128,12 +133,11 @@ def simpleStemming(word):
     morphList = list(dict.fromkeys(morphList)) #removes duplicates from list
     morphList.sort(key=len, reverse=True) #sort by word length
     morphList = morphList[1:-1] #remove front and back
-    morphList = [i for i in morphList if len(i) >= 2]
+    morphList = [i for i in morphList if len(i) > 2]
     return morphList
 
 ''' Implementation of Hidden Markov model '''
 def viterbiAlgo(sentence, tags):
-    #print(sentence)#DEBUG
     ''' init tables and array used in dynamic programming '''
     sentenceLen = len(sentence)
     states = np.arange(len(TAGPROB))
@@ -147,16 +151,25 @@ def viterbiAlgo(sentence, tags):
     eachCounter = 0
     #print("[ " +sentence[0] + " ] " + tags[0])#DEBUG
     for each in TAGPROB:
+        lastResort = True
         try:
             table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][sentence[0]]))
+            lastResort = False
         except:
             morphList = simpleStemming(sentence[0])
             for wordMorph in morphList:
                 try:
                     table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY * TAGPROB[each]))
+                    lastResort = False
                     break
                 except:
                     continue
+        if lastResort == True:
+            try:
+                table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(0.00001 * UNKOWN_PENALTY * TAGPROB[each]))
+            except:
+                logProb = 0
+                lastResort = False
         #print(each + "\t" + str(table[eachCounter, 0]))#DEBUG
         eachCounter += 1
     #print("----") #DEBUG
@@ -171,16 +184,28 @@ def viterbiAlgo(sentence, tags):
             for state2 in TAGPROB:
                 tranState = state2 + "_" + state1
                 logProb = 0
+                lastResort = True
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
+                    lastResort = False
                 except Exception as e:
                     morphList = simpleStemming(sentence[i])
                     for wordMorph in morphList:
                         try:
-                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY * TAGPROB[state1]))
+                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY * TAGPROB[state2]))
+                            lastResort = False
                             break
                         except:
                             continue
+                if lastResort == True:
+                    try:
+                        emissionHardCode = 0.00001
+                        if state2 == "VERB" and sentence[i][-2:] == "ed":
+                            emissionHardCode = 0.80
+                        logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(0.00001 * UNKOWN_PENALTY * TAGPROB[state2]))
+                    except:
+                        logProb = 0
+                    lastResort = False
                 if not logProb == 0:
                     if (bestProb == 0) or (logProb > bestProb):
                         bestProb = logProb
@@ -221,6 +246,8 @@ if __name__ == "__main__":
         calcTransProb(dataset)
         calcEmissionProb(dataset)
 
+        print(STARTPROB)
+
         #store DICT in pickle file
         with open('tagprob.pickle', 'wb') as tagOut:
             pickle.dump(TAGPROB, tagOut)
@@ -247,15 +274,23 @@ if __name__ == "__main__":
         transIn = open('transprob.pickle','rb')
         TRANSPROB = pickle.load(transIn)
 
-        counter = 0
+        totalTags = 0
+        correctTags = 0
+        counter = 1
         for tokenlist in conllu.parse_incr(data_file):
-            if counter == 2:
-                break
             wordList = []
             tagList = []
             for word in tokenlist:
                 wordList.append(word['form'].lower())
                 tagList.append(word['upostag'])
+            print(counter)
+            print(wordList)
             pred = viterbiAlgo(wordList, tagList)
-
+            print(tagList)
+            print(pred)
+            for i in range(len(pred)):
+                totalTags += 1
+                if pred[i] == tagList[i]:
+                    correctTags += 1
             counter += 1
+        print(correctTags/totalTags)
