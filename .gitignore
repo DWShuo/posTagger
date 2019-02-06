@@ -1,4 +1,3 @@
 # Ignore pickles
 *.pdf
-*.pkl
-**/*.pkl
+*.pickle
