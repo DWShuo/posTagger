@@ -3,6 +3,7 @@ import sys
 import conllu
 import pickle
 import numpy as np
+from prettytable import PrettyTable
 
 #GLOBAL DICTS
 STARTPROB = {} #probability of starting with this pos
@@ -11,7 +12,7 @@ EMISSIONPROB = {} #probability of word coming emitting from particular pos
 TAGPROB = {} #probabililty of seeing this tag
 
 #PENALTY FOR UNKNOWN WORDS
-UNKOWN_PENALTY = 0.7 #unknow words suffer a 30% penality to probaility level
+UNKOWN_PENALTY = 0.3 #unknow words suffer a 30% penality to probaility level
 
 ''' Calculate list of tags '''
 def calcTagProb(dataset):
@@ -155,16 +156,17 @@ def viterbiAlgo(sentence, tags):
         try:
             table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][sentence[0]]))
             lastResort = False
+        #except:
+        #    morphList = simpleStemming(sentence[0])
+        #    for wordMorph in morphList:
+        #        try:
+        #            table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY * TAGPROB[each]))
+        #            lastResort = False
+        #            break
+        #        except:
+        #            continue
+        #if lastResort == True:
         except:
-            morphList = simpleStemming(sentence[0])
-            for wordMorph in morphList:
-                try:
-                    table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(EMISSIONPROB[each][wordMorph] * UNKOWN_PENALTY * TAGPROB[each]))
-                    lastResort = False
-                    break
-                except:
-                    continue
-        if lastResort == True:
             try:
                 table[eachCounter,0] = safeMultiply(safeLog(STARTPROB[each]), safeLog(0.00001 * UNKOWN_PENALTY * TAGPROB[each]))
             except:
@@ -188,20 +190,21 @@ def viterbiAlgo(sentence, tags):
                 try:
                     logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][sentence[i]]))
                     lastResort = False
-                except Exception as e:
-                    morphList = simpleStemming(sentence[i])
-                    for wordMorph in morphList:
-                        try:
-                            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY * TAGPROB[state2]))
-                            lastResort = False
-                            break
-                        except:
-                            continue
-                if lastResort == True:
+                #except Exception as e:
+                #    morphList = simpleStemming(sentence[i])
+                #    for wordMorph in morphList:
+                #        try:
+                #            logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(EMISSIONPROB[state1][wordMorph] * UNKOWN_PENALTY * TAGPROB[state2]))
+                #            lastResort = False
+                #            break
+                #        except:
+                #            continue
+                #if lastResort == True:
+                except:
                     try:
                         emissionHardCode = 0.00001
-                        if state2 == "VERB" and sentence[i][-2:] == "ed":
-                            emissionHardCode = 0.80
+                        #if state2 == "VERB" and (sentence[i][-2:] == "ed" or sentence[i][-3:] == "ing"):
+                        #    emissionHardCode = 0.80
                         logProb = safeMultiply(safeMultiply(table[state2Row, i-1], safeLog(TRANSPROB[tranState])), safeLog(0.00001 * UNKOWN_PENALTY * TAGPROB[state2]))
                     except:
                         logProb = 0
@@ -283,14 +286,25 @@ if __name__ == "__main__":
             for word in tokenlist:
                 wordList.append(word['form'].lower())
                 tagList.append(word['upostag'])
-            print(counter)
-            print(wordList)
             pred = viterbiAlgo(wordList, tagList)
-            print(tagList)
-            print(pred)
+
+           #Calculate accuracy
             for i in range(len(pred)):
                 totalTags += 1
                 if pred[i] == tagList[i]:
                     correctTags += 1
-            counter += 1
-        print(correctTags/totalTags)
+
+            #pretty table print
+            wordList.insert(0,"Input sequence")
+            tagList.insert(0,"Acutal")
+            pred.insert(0,"Prediction")
+            wordNum = list(range(0,len(wordList)))
+            ptable = PrettyTable()
+            ptable.field_names = wordNum
+            ptable.add_row(wordList)
+            ptable.add_row(tagList)
+            ptable.add_row(pred)
+            if(len(wordList) <= 15):
+                print(ptable)
+
+        print("Overall Accuracy: ", (correctTags/totalTags)*100 , "%")
